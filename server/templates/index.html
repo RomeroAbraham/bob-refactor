@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BobRefactor — Code, Upgraded.</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            bg:      '#0d1117',
+            surface: '#161b22',
+            card:    '#1c2128',
+            border:  '#30363d',
+            lime:    '#aaff00',
+          },
+          fontFamily: {
+            sans: ['"Inter"', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', '"Fira Code"', 'Consolas', 'monospace'],
+          },
+          animation: {
+            'pulse-lime': 'pulseLime 2s ease-in-out infinite',
+            'fade-in':    'fadeIn .35s ease forwards',
+            'slide-up':   'slideUp .4s cubic-bezier(.16,1,.3,1) forwards',
+          },
+          keyframes: {
+            pulseLime: {
+              '0%,100%': { boxShadow: '0 0 10px #aaff0044' },
+              '50%':     { boxShadow: '0 0 28px #aaff0088' },
+            },
+            fadeIn:  { from: { opacity: 0 },             to: { opacity: 1 } },
+            slideUp: { from: { opacity: 0, transform: 'translateY(12px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
+          },
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { background: #0d1117; color: #e6edf3; font-family: 'Inter', sans-serif; display: flex; flex-direction: column; min-height: 100vh; }
+
+    /* ── Scrollbars ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+    /* ── Code textarea ── */
+    .code-area {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.75;
+      color: #c9d1d9;
+      background: #161b22;
+      border: none;
+      outline: none;
+      resize: none;
+      width: 100%;
+      flex: 1;
+      padding: 16px 20px;
+      tab-size: 2;
+    }
+    .code-area::placeholder { color: #484f58; }
+    .code-area:focus { background: #161b22; }
+
+    /* Output code colours */
+    #code-output { color: #a5d6ff; }
+
+    /* ── Status bar ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 16px;
+      border-top: 1px solid #30363d;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #484f58;
+      background: #161b22;
+      user-select: none;
+    }
+
+    /* ── Panel ── */
+    .panel {
+      flex: 1;
+      border: 1px solid #30363d;
+      border-radius: 14px;
+      background: #161b22;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid #30363d;
+      background: #1c2128;
+      flex-shrink: 0;
+    }
+
+    /* ── Center column ── */
+    .center-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 110px;
+      position: relative;
+    }
+    .center-col::before {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 1px;
+      background: linear-gradient(to bottom, transparent, #30363d 20%, #30363d 80%, transparent);
+    }
+
+    /* ── Refactor button ── */
+    #refactor-btn {
+      position: relative;
+      z-index: 2;
+      width: 88px;
+      height: 116px;
+      border-radius: 18px;
+      background: #aaff00;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      color: #0d1117;
+      font-family: 'Inter', sans-serif;
+      font-weight: 800;
+      font-size: 11.5px;
+      text-align: center;
+      line-height: 1.3;
+      box-shadow: 0 0 0 0 #aaff0044;
+      transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+      animation: pulseLime 2.8s ease-in-out infinite;
+    }
+    #refactor-btn:hover  { transform: scale(1.06); background: #bbff33; box-shadow: 0 0 32px #aaff0066, 0 8px 24px #00000066; }
+    #refactor-btn:active { transform: scale(.96); }
+    #refactor-btn:disabled { background: #3d4d1a; color: #6b7e2a; cursor: not-allowed; animation: none; box-shadow: none; }
+
+    /* ── Loading spinner ── */
+    .spinner {
+      width: 22px; height: 22px;
+      border: 2.5px solid #0d111733;
+      border-top-color: #0d1117;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulseLime {
+      0%,100% { box-shadow: 0 0 12px #aaff0033, 0 6px 20px #00000055; }
+      50%      { box-shadow: 0 0 28px #aaff0077, 0 6px 20px #00000055; }
+    }
+
+    /* ── Language badge pill ── */
+    .lang-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      border: 1px solid #aaff00;
+      border-radius: 7px;
+      padding: 3px 10px;
+      font-size: 11px; font-weight: 600;
+      color: #aaff00;
+      background: transparent;
+      cursor: pointer;
+      transition: background .15s;
+      user-select: none;
+    }
+    .lang-pill:hover { background: #aaff0011; }
+
+    /* ── Dropdown ── */
+    .lang-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      min-width: 130px;
+      background: #1c2128;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      overflow: hidden;
+      z-index: 50;
+      box-shadow: 0 8px 24px #00000077;
+    }
+    .lang-option {
+      display: block; width: 100%; text-align: left;
+      padding: 8px 14px;
+      font-size: 12px; color: #8b949e;
+      background: none; border: none;
+      cursor: pointer;
+      transition: background .12s, color .12s;
+    }
+    .lang-option:hover  { background: #2563eb22; color: #e6edf3; }
+    .lang-option.active { background: #2563eb; color: #fff; font-weight: 600; }
+
+    /* ── Tag badge ── */
+    .tag {
+      font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 1px 6px;
+      color: #484f58;
+    }
+
+    /* ── Copy button ── */
+    #copy-btn {
+      display: none;
+      align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 500; color: #8b949e;
+      background: none; border: 1px solid #30363d;
+      border-radius: 6px; padding: 3px 10px; cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+    #copy-btn:hover { color: #aaff00; border-color: #aaff00; }
+    #copy-btn.visible { display: flex; }
+
+    /* ── Explanation panel ── */
+    #explanation-card {
+      border: 1px solid #30363d;
+      border-radius: 14px;
+      background: #161b22;
+      padding: 16px 20px;
+      flex-shrink: 0;
+    }
+
+    /* ── Empty state ── */
+    #empty-state { animation: fadeIn .3s ease; }
+    #code-output.visible { display: block; animation: slideUp .4s cubic-bezier(.16,1,.3,1) forwards; }
+
+    /* ── Error toast ── */
+    #error-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(60px);
+      background: #3d1a1a; border: 1px solid #ff4c4c55;
+      border-radius: 10px; padding: 10px 20px;
+      font-size: 12px; color: #ff7b72;
+      box-shadow: 0 8px 24px #00000066;
+      transition: transform .3s cubic-bezier(.16,1,.3,1), opacity .3s;
+      opacity: 0; z-index: 100;
+    }
+    #error-toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+    /* ── Char counter colours ── */
+    .char-warn  { color: #d29922; }
+    .char-error { color: #f85149; }
+
+    /* ── Right panel layout ── */
+    .right-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+    .output-panel {
+      flex: 1;
+      min-height: 0;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════
+     NAVBAR
+══════════════════════════════════════════════ -->
+<header style="background:#161b22;border-bottom:1px solid #21262d;flex-shrink:0;">
+  <div style="max-width:1400px;margin:0 auto;padding:0 28px;height:52px;display:flex;align-items:center;justify-content:space-between;">
+
+    <!-- Logo -->
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:36px;height:36px;border-radius:9px;background:#1c2128;border:1px solid #30363d;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;color:#aaff00;">{}</span>
+      </div>
+      <div>
+        <div style="font-weight:700;font-size:13px;line-height:1.2;color:#e6edf3;letter-spacing:-.01em;">
+          Bob<span style="color:#aaff00;">Refactor.</span>
+        </div>
+        <div style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#484f58;">Code, Upgraded.</div>
+      </div>
+    </div>
+
+    <!-- Center status -->
+    <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#6e7681;">
+      <span id="nav-dot" style="width:7px;height:7px;border-radius:50%;background:#aaff00;display:inline-block;box-shadow:0 0 7px #aaff0099;flex-shrink:0;"></span>
+      <span id="nav-status">AI-powered workspace</span>
+    </div>
+
+    <!-- Version -->
+    <div style="font-size:11px;color:#6e7681;border:1px solid #30363d;border-radius:20px;padding:3px 12px;background:#1c2128;letter-spacing:.04em;">
+      v1.0 / BETA
+    </div>
+
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════
+     MAIN
+══════════════════════════════════════════════ -->
+<main style="flex:1;display:flex;flex-direction:column;max-width:1400px;width:100%;margin:0 auto;padding:32px 28px 24px;gap:24px;min-height:0;">
+
+  <!-- Hero text -->
+  <div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#484f58;margin-bottom:10px;">
+      <span style="width:24px;height:1px;background:#30363d;display:inline-block;"></span>
+      The Workspace
+    </div>
+    <h1 style="font-size:clamp(26px,3vw,38px);font-weight:700;color:#e6edf3;margin:0 0 8px;letter-spacing:-.02em;line-height:1.1;">Old code, meet new tricks.</h1>
+    <p style="font-size:13px;color:#6e7681;margin:0;max-width:560px;">
+      Drop in your legacy code.
+      <span style="color:#aaff00;font-weight:500;">Bob</span> will make it cleaner,
+      <span style="color:#aaff00;font-weight:500;">smarter</span>, and ready for what's next.
+    </p>
+  </div>
+
+  <!-- ── WORKSPACE ROW ── -->
+  <div style="display:flex;gap:0;align-items:stretch;flex:1;min-height:460px;">
+
+    <!-- ═══ LEFT PANEL — Input ═══ -->
+    <div class="panel">
+
+      <div class="panel-header">
+        <!-- Title -->
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg width="15" height="15" fill="none" stroke="#aaff00" stroke-width="2" viewBox="0 0 24 24">
+            <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+          </svg>
+          <span style="font-weight:600;font-size:13px;color:#e6edf3;">Legacy code</span>
+          <span class="tag">input</span>
+        </div>
+
+        <!-- Language selector -->
+        <div style="position:relative;" id="lang-wrapper">
+          <button class="lang-pill" id="lang-btn" type="button">
+            <span id="selected-lang">TypeScript</span>
+            <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="lang-dropdown" id="lang-menu" style="display:none;">
+            <button class="lang-option" data-lang="TypeScript">TypeScript</button>
+            <button class="lang-option" data-lang="JavaScript">JavaScript</button>
+            <button class="lang-option" data-lang="Python">Python</button>
+            <button class="lang-option" data-lang="Go">Go</button>
+            <button class="lang-option" data-lang="Rust">Rust</button>
+            <button class="lang-option" data-lang="Java">Java</button>
+            <button class="lang-option" data-lang="C#">C#</button>
+            <button class="lang-option" data-lang="Kotlin">Kotlin</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Textarea -->
+      <textarea
+        id="code-input"
+        class="code-area"
+        spellcheck="false"
+        autocomplete="off"
+        placeholder="// Paste your legacy code here...
+// Example:
+function getUser(id) {
+    var result = users.filter(function(u) {
+        return u.id == id;
+    });
+    return result[0];
+}"
+      ></textarea>
+
+      <!-- Status bar -->
+      <div class="status-bar">
+        <span>UTF-8 &nbsp;·&nbsp; <span style="color:#aaff00;">Ready for input</span></span>
+        <span id="char-count">0 / 12,000</span>
+      </div>
+    </div>
+
+    <!-- ═══ CENTER — Action button ═══ -->
+    <div class="center-col">
+      <button id="refactor-btn" title="Refactor with Bob">
+        <!-- Icon: layers -->
+        <svg id="btn-icon" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+          <polyline points="2 17 12 22 22 17"/>
+          <polyline points="2 12 12 17 22 12"/>
+        </svg>
+        <span id="btn-label" style="pointer-events:none;">Refactor<br/>with Bob</span>
+        <!-- Arrow -->
+        <svg id="btn-arrow" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <line x1="5" y1="12" x2="19" y2="12"/>
+          <polyline points="12 5 19 12 12 19"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- ═══ RIGHT COLUMN ═══ -->
+    <div class="right-col">
+
+      <!-- Output panel -->
+      <div class="panel output-panel">
+
+        <div class="panel-header">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <svg width="15" height="15" fill="none" stroke="#aaff00" stroke-width="2" viewBox="0 0 24 24">
+              <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            <span style="font-weight:600;font-size:13px;color:#e6edf3;">Refactored code</span>
+            <span class="tag">output</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span id="output-lang-label" style="font-size:11px;color:#484f58;"></span>
+            <button id="copy-btn" onclick="copyOutput()">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+              </svg>
+              <span id="copy-label">Copy</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Empty state -->
+        <div id="empty-state" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px;">
+          <div style="width:52px;height:52px;border-radius:14px;background:#1c2128;border:1px solid #30363d;display:flex;align-items:center;justify-content:center;">
+            <svg width="22" height="22" fill="none" stroke="#484f58" stroke-width="1.8" viewBox="0 0 24 24">
+              <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
+              <polyline points="13 2 13 9 20 9"/>
+              <line x1="9" y1="13" x2="15" y2="13"/>
+              <line x1="9" y1="17" x2="13" y2="17"/>
+            </svg>
+          </div>
+          <div style="text-align:center;">
+            <p style="font-weight:600;font-size:13px;color:#8b949e;margin:0 0 6px;">Your upgraded code appears here</p>
+            <p style="font-size:11px;color:#484f58;margin:0;line-height:1.6;">Paste your code and let Bob do<br/>the heavy lifting.</p>
+          </div>
+        </div>
+
+        <!-- Loading state (hidden) -->
+        <div id="loading-state" style="flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;">
+          <div class="spinner"></div>
+          <p style="font-size:12px;color:#6e7681;font-family:'JetBrains Mono',monospace;">Bob is thinking...</p>
+        </div>
+
+        <!-- Output code (hidden) -->
+        <textarea
+          id="code-output"
+          class="code-area"
+          style="display:none;color:#a5d6ff;"
+          spellcheck="false"
+          readonly
+        ></textarea>
+
+        <!-- Status bar -->
+        <div class="status-bar" id="output-status-bar">
+          <span id="output-status-left" style="color:#484f58;">Waiting for code</span>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <span id="status-dot" style="width:6px;height:6px;border-radius:50%;background:#484f58;display:inline-block;"></span>
+            <span id="status-label">Standby</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bob's explanation card -->
+      <div id="explanation-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:24px;height:24px;border-radius:50%;background:#1c2128;border:1px solid #30363d;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="11" height="11" fill="none" stroke="#aaff00" stroke-width="2" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <span style="font-weight:600;font-size:13px;color:#e6edf3;">Bob's explanation</span>
+          </div>
+          <span id="explanation-tag" class="tag" style="display:none;">AI generated</span>
+        </div>
+        <p id="explanation-text" style="font-size:12px;color:#6e7681;line-height:1.75;margin:0;">
+          A clear breakdown of the changes will show up
+          <span style="color:#aaff00;">here</span>
+          once Bob refactors your code.
+        </p>
+      </div>
+
+    </div><!-- /right-col -->
+  </div><!-- /workspace row -->
+</main>
+
+<!-- ══════════════════════════════════════════════
+     FOOTER
+══════════════════════════════════════════════ -->
+<footer style="background:#161b22;border-top:1px solid #21262d;flex-shrink:0;">
+  <div style="max-width:1400px;margin:0 auto;padding:12px 28px;display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-size:11px;color:#484f58;">Built for the code you have. Ready for the code you want.</span>
+    <span style="font-size:10px;color:#30363d;letter-spacing:.1em;text-transform:uppercase;">BOB REFACTOR © 2026</span>
+  </div>
+</footer>
+
+<!-- Error toast -->
+<div id="error-toast"></div>
+
+<!-- ══════════════════════════════════════════════
+     SCRIPT
+══════════════════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  // ── Elements ──────────────────────────────────
+  const refactorBtn     = document.getElementById('refactor-btn');
+  const codeInput       = document.getElementById('code-input');
+  const codeOutput      = document.getElementById('code-output');
+  const emptyState      = document.getElementById('empty-state');
+  const loadingState    = document.getElementById('loading-state');
+  const explanationText = document.getElementById('explanation-text');
+  const explanationTag  = document.getElementById('explanation-tag');
+  const charCount       = document.getElementById('char-count');
+  const copyBtn         = document.getElementById('copy-btn');
+  const copyLabel       = document.getElementById('copy-label');
+  const outputLangLabel = document.getElementById('output-lang-label');
+  const statusDot       = document.getElementById('status-dot');
+  const statusLabel     = document.getElementById('status-label');
+  const outputStatusLeft= document.getElementById('output-status-left');
+  const navStatus       = document.getElementById('nav-status');
+  const navDot          = document.getElementById('nav-dot');
+  const errorToast      = document.getElementById('error-toast');
+
+  // ── Language dropdown ──────────────────────────
+  const langBtn    = document.getElementById('lang-btn');
+  const langMenu   = document.getElementById('lang-menu');
+  const selectedLangEl = document.getElementById('selected-lang');
+  let selectedLang = 'TypeScript';
+
+  // Mark default option active
+  document.querySelectorAll('.lang-option').forEach(opt => {
+    if (opt.dataset.lang === selectedLang) opt.classList.add('active');
+    opt.addEventListener('click', () => {
+      selectedLang = opt.dataset.lang;
+      selectedLangEl.textContent = selectedLang;
+      document.querySelectorAll('.lang-option').forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+      langMenu.style.display = 'none';
+    });
+  });
+
+  langBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    langMenu.style.display = langMenu.style.display === 'none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', e => {
+    if (!document.getElementById('lang-wrapper').contains(e.target)) {
+      langMenu.style.display = 'none';
+    }
+  });
+
+  // ── Char counter ───────────────────────────────
+  const MAX_CHARS = 12000;
+  codeInput.addEventListener('input', () => {
+    const len = codeInput.value.length;
+    charCount.textContent = `${len.toLocaleString()} / ${MAX_CHARS.toLocaleString()}`;
+    charCount.className = len > MAX_CHARS * .9 ? (len >= MAX_CHARS ? 'char-error' : 'char-warn') : '';
+    if (len >= MAX_CHARS) codeInput.value = codeInput.value.slice(0, MAX_CHARS);
+  });
+
+  // ── Toast helper ───────────────────────────────
+  let toastTimer;
+  function showError(msg) {
+    clearTimeout(toastTimer);
+    errorToast.textContent = msg;
+    errorToast.classList.add('show');
+    toastTimer = setTimeout(() => errorToast.classList.remove('show'), 4000);
+  }
+
+  // ── Copy helper ────────────────────────────────
+  window.copyOutput = function () {
+    if (!codeOutput.value) return;
+    navigator.clipboard.writeText(codeOutput.value).then(() => {
+      copyLabel.textContent = 'Copied!';
+      copyBtn.style.color = '#aaff00';
+      copyBtn.style.borderColor = '#aaff00';
+      setTimeout(() => {
+        copyLabel.textContent = 'Copy';
+        copyBtn.style.color = '';
+        copyBtn.style.borderColor = '';
+      }, 1800);
+    });
+  };
+
+  // ── UI state helpers ───────────────────────────
+  function setOutputState(state) {
+    emptyState.style.display    = 'none';
+    loadingState.style.display  = 'none';
+    codeOutput.style.display    = 'none';
+
+    if (state === 'empty') {
+      emptyState.style.display = 'flex';
+      statusDot.style.background   = '#484f58';
+      statusLabel.textContent      = 'Standby';
+      outputStatusLeft.textContent = 'Waiting for code';
+      outputStatusLeft.style.color = '#484f58';
+      copyBtn.classList.remove('visible');
+      outputLangLabel.textContent  = '';
+    } else if (state === 'loading') {
+      loadingState.style.display = 'flex';
+      statusDot.style.background   = '#d29922';
+      statusLabel.textContent      = 'Processing…';
+      outputStatusLeft.textContent = 'Bob is working…';
+      outputStatusLeft.style.color = '#d29922';
+    } else if (state === 'done') {
+      codeOutput.style.display = 'block';
+      statusDot.style.background   = '#aaff00';
+      statusDot.style.boxShadow    = '0 0 6px #aaff0077';
+      statusLabel.textContent      = 'Ready';
+      outputStatusLeft.textContent = `Refactored to ${selectedLang}`;
+      outputStatusLeft.style.color = '#aaff00';
+      copyBtn.classList.add('visible');
+      outputLangLabel.textContent  = selectedLang;
+    }
+  }
+
+  function setNavState(state) {
+    if (state === 'loading') {
+      navDot.style.background  = '#d29922';
+      navDot.style.boxShadow   = '0 0 7px #d2992299';
+      navStatus.textContent    = 'Bob is refactoring…';
+    } else {
+      navDot.style.background  = '#aaff00';
+      navDot.style.boxShadow   = '0 0 7px #aaff0099';
+      navStatus.textContent    = 'AI-powered workspace';
+    }
+  }
+
+  function setBtnLoading(loading) {
+    if (loading) {
+      refactorBtn.disabled = true;
+      refactorBtn.innerHTML = '<div class="spinner"></div><span style="font-size:10px;font-weight:700;pointer-events:none;">Working…</span>';
+    } else {
+      refactorBtn.disabled = false;
+      refactorBtn.innerHTML = `
+        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+          <polyline points="2 17 12 22 22 17"/>
+          <polyline points="2 12 12 17 22 12"/>
+        </svg>
+        <span style="pointer-events:none;line-height:1.3;">Refactor<br/>with Bob</span>
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <line x1="5" y1="12" x2="19" y2="12"/>
+          <polyline points="12 5 19 12 12 19"/>
+        </svg>`;
+    }
+  }
+
+  // ── Main refactor handler ───────────────────────
+  refactorBtn.addEventListener('click', async () => {
+    const code = codeInput.value.trim();
+    if (!code) {
+      showError('⚠ Paste some code first before refactoring.');
+      codeInput.focus();
+      return;
+    }
+
+    setBtnLoading(true);
+    setOutputState('loading');
+    setNavState('loading');
+    explanationTag.style.display = 'none';
+    explanationText.innerHTML = '<span style="color:#484f58;font-style:italic;">Bob is analyzing your code…</span>';
+
+    try {
+      const res = await fetch('/api/refactor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, language: selectedLang }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Server error ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      // Output code
+      codeOutput.value = data.refactored_code || '';
+      setOutputState('done');
+
+      // Explanation
+      const rawExpl = data.explanation || 'Refactoring complete.';
+      explanationText.textContent = rawExpl;
+      explanationTag.style.display = 'inline';
+
+    } catch (err) {
+      console.error(err);
+      showError(`✕ ${err.message || 'Could not reach Bob. Check the server.'}`);
+      setOutputState('empty');
+      explanationText.innerHTML = `<span style="color:#f85149;">${err.message || 'An error occurred.'}</span>`;
+    } finally {
+      setBtnLoading(false);
+      setNavState('idle');
+    }
+  });
+
+  // Init
+  setOutputState('empty');
+})();
+</script>
+</body>
+</html>
